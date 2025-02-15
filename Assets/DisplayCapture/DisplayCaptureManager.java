@@ -118,29 +118,39 @@ public class DisplayCaptureManager implements ImageReader.OnImageAvailableListen
 	}
 
 	@Override
-	public void onImageAvailable(@NonNull ImageReader imageReader) {
+	public void onImageAvailable(@NonNull ImageReader imageReader) { // modified for quest 2
 		Image image = imageReader.acquireLatestImage();
 
 		if (image == null) return;
 
 		ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+		int imageBufferSize = buffer.remaining(); // get size of incoming data
+		
+		// adjust buffer if needed
+		if (byteBuffer.capacity() < imageBufferSize) {
+			byteBuffer = ByteBuffer.allocateDirect(imageBufferSize);
+		}
+		
 		buffer.rewind();
-
-		// Clear the buffer for new data by resetting the position of the buffer to zero
 		byteBuffer.clear();
-		byteBuffer.put(buffer);
+		
+		// copy what we can fit
+		int bytesToCopy = Math.min(imageBufferSize, byteBuffer.capacity());
+		byte[] temp = new byte[bytesToCopy];
+		buffer.get(temp);
+		byteBuffer.put(temp);
 
 		long timestamp = image.getTimestamp();
 
 		image.close();
 
 		for(int i = 0; i < receivers.size(); i++) {
-			buffer.rewind();
+			byteBuffer.rewind();
 			receivers.get(i).onNewImage(byteBuffer, width, height, timestamp);
-		}
+    }
 
-		unityInterface.OnNewFrameAvailable();
-	}
+    unityInterface.OnNewFrameAvailable();
+}
 
 	private void handleScreenCaptureEnd() {
 
@@ -153,20 +163,18 @@ public class DisplayCaptureManager implements ImageReader.OnImageAvailableListen
 	// Called by Unity
 
 	public void setup(String gameObjectName, int width, int height) {
-
 		unityInterface = new UnityInterface(gameObjectName);
-
+	
 		this.width = width;
 		this.height = height;
-
-		// Calculate the exact buffer size required (4 bytes per pixel for RGBA_8888)
-		int bufferSize = width * height * 4;
-
-		// Allocate a direct ByteBuffer for better performance
+	
+		// get the buffer size with extra
+		int bufferSize = width * height * 4 * 2; // double the size
+	
+		// set direct ByteBuffer for better performance
 		byteBuffer = ByteBuffer.allocateDirect(bufferSize);
-
+	
 		reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
-
 		reader.setOnImageAvailableListener(this, new Handler(Looper.getMainLooper()));
 	}
 

@@ -12,7 +12,7 @@ namespace Anaglyph.DisplayCapture
 		public bool startScreenCaptureOnStart = true;
 		public bool flipTextureOnGPU = false;
 
-		[SerializeField] private Vector2Int textureSize = new(1024, 1024);
+		[SerializeField] private Vector2Int textureSize = new(512, 512); // swapped back from 1024 to 512 as menu was located wrong
 		public Vector2Int Size => textureSize;
 
 		private Texture2D screenTexture;

@@ -41,7 +41,8 @@ namespace Anaglyph.DisplayCapture.Barcodes
 			public void SetEnabled(bool enabled) => androidInstance.Call("setEnabled", enabled);
 		}
 
-		public event Action<IEnumerable<Result>> OnReadBarcodes = delegate { };
+		//public event Action<IEnumerable<Result>> OnReadBarcodes = delegate { }; // for qr
+		public event Action<IEnumerable<Result>> OnReadBarcodes;
 
 		private AndroidInterface androidInterface;
 
