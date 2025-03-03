@@ -17,37 +17,22 @@ namespace Anaglyph.DisplayCapture.Barcodes
 		// public void Set(BarcodeTracker.Result result) => Set(result.text, result.corners); // corners is for qr
 		public void Set(BarcodeTracker.Result result) => Set(result.text, result.startPoint, result.endPoint);
 
-		/*
-		public void Set(string text, Vector3[] corners)
-		{
-			Vector3 topCenter = (corners[2] + corners[3]) / 2f;
-			transform.position = topCenter;
-
-			Vector3 up = (corners[1] - corners[0]).normalized;
-			Vector3 right = (corners[2] - corners[1]).normalized;
-			Vector3 normal = -Vector3.Cross(up, right).normalized;
-
-			Vector3 center = (corners[2] + corners[0]) / 2f;
-
-			for (int i = 0; i < 4; i++)
-			{
-				Vector3 dir = (corners[i] - center).normalized;
-				offsetPositions[i] = corners[i] + (dir * 0.1f);
-			}
-
-			transform.rotation = Quaternion.LookRotation(normal, up);
-
-			lineRenderer.SetPositions(offsetPositions);
-			textMesh.text = text;
-		}
-		*/
 		public void Set(string text, Vector3 startPoint, Vector3 endPoint)
 		{
 			Vector3 center = (startPoint + endPoint) / 2f;
 			transform.position = center;
 
-			Vector3 forward = (endPoint - startPoint).normalized;
-			Vector3 up = Vector3.up; // Assume barcode is upright
+			Vector3 facingUser = (endPoint - startPoint).normalized;
+
+			Vector3 forward = -Camera.main.transform.forward;
+			Vector3 up = Vector3.Cross(facingUser, forward).normalized; // Assume barcode is upright
+			if (up.magnitude < 0.001f) // If barcode is nearly parallel to camera view
+            {
+                up = Vector3.up; // Default to world up
+            }
+			
+			Vector3 right = Vector3.Cross(up, forward).normalized;
+
 			transform.rotation = Quaternion.LookRotation(forward, up);
 
 			linePositions[0] = startPoint;
@@ -56,6 +41,8 @@ namespace Anaglyph.DisplayCapture.Barcodes
 			lineRenderer.SetPositions(linePositions);
 
 			textMesh.text = text;
+			textMesh.transform.localPosition = new Vector3(0, 0, -0.05f); // to help visability
+
 		}
 
 	}

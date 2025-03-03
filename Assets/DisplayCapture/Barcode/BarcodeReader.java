@@ -6,13 +6,10 @@ import android.graphics.Bitmap;
 
 import com.google.android.gms.tasks.Task;
 import com.google.gson.Gson;
-//import com.google.mlkit.vision.barcode.BarcodeScanner;
-//import com.google.mlkit.vision.barcode.BarcodeScannerOptions;
-//import com.google.mlkit.vision.barcode.BarcodeScanning;
-//import com.google.mlkit.vision.barcode.common.Barcode;
-//import com.google.mlkit.vision.common.InputImage;
 import com.google.zxing.BinaryBitmap;
+import com.google.zxing.DecodeHintType;
 import com.google.zxing.LuminanceSource;
+import com.google.zxing.MultiFormatReader;
 import com.google.zxing.RGBLuminanceSource;
 import com.google.zxing.Result;
 import com.google.zxing.ResultPoint;
@@ -22,10 +19,14 @@ import com.unity3d.player.UnityPlayer;
 
 import java.io.Serializable;
 import java.nio.ByteBuffer;
-import java.util.List;
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.Map;
 import java.util.Objects;
 
 import android.util.Log;
+import com.google.zxing.BarcodeFormat;
+
 
 public class BarcodeReader implements IDisplayCaptureReceiver {
 
@@ -33,9 +34,11 @@ public class BarcodeReader implements IDisplayCaptureReceiver {
 		public String text;
 		public Point[] points;
 		public long timestamp;
+		public String format;
 
 		public Result(com.google.zxing.Result result, long timestamp) {
 			this(result.getText(), result.getResultPoints(), timestamp);
+			this.format = result.getBarcodeFormat().toString();
 		}
 
 		public Result(String text, ResultPoint[] points, long timestamp) {
@@ -66,15 +69,13 @@ public class BarcodeReader implements IDisplayCaptureReceiver {
 
 		public Point(ResultPoint point) {
 			x = point.getX();
-			y = point.getY	();
+			y = point.getY();
 		}
 	}
 
-
-
 	public static BarcodeReader instance = null;
 
-	private final QRCodeReader scanner;
+	private final MultiFormatReader multiFormatReader;
 	private final Gson gson;
 	
 	private boolean enabled;
@@ -94,15 +95,32 @@ public class BarcodeReader implements IDisplayCaptureReceiver {
 
 	public BarcodeReader() {
 
-//		var optBuilder = new BarcodeScannerOptions.Builder();
-//		optBuilder.setBarcodeFormats(Barcode.FORMAT_QR_CODE);
-//		optBuilder.build();
-//
-//		scanner = BarcodeScanning.getClient(optBuilder.build());
 
-		scanner = new QRCodeReader();
+		multiFormatReader = new MultiFormatReader();
+
+		Map<DecodeHintType, Object> hints = new EnumMap<>(DecodeHintType.class);
+
+		EnumSet<BarcodeFormat> decodeFormats = EnumSet.of(
+			BarcodeFormat.QR_CODE,
+			BarcodeFormat.UPC_A,
+			BarcodeFormat.UPC_E,
+			BarcodeFormat.EAN_13,
+			BarcodeFormat.EAN_8,
+			BarcodeFormat.CODE_39,
+			BarcodeFormat.CODE_93,
+			BarcodeFormat.CODE_128,
+			BarcodeFormat.ITF,
+			BarcodeFormat.DATA_MATRIX,
+			BarcodeFormat.AZTEC,
+			BarcodeFormat.PDF_417
+		);
+
+		hints.put(DecodeHintType.POSSIBLE_FORMATS, decodeFormats);
+		hints.put(DecodeHintType.TRY_HARDER, Boolean.TRUE);
+		multiFormatReader.setHints(hints);
 
 		gson = new Gson();
+		Log.i(TAG, "BarcodeReader Started");
 	}
 
 	public static synchronized BarcodeReader getInstance()
@@ -118,6 +136,7 @@ public class BarcodeReader implements IDisplayCaptureReceiver {
 			return;
 
 		this.enabled = enabled;
+		Log.i(TAG, "BarcodeReader enabled");
 
 		if(this.enabled) {
 			DisplayCaptureManager.getInstance().receivers.add(this);
@@ -129,91 +148,64 @@ public class BarcodeReader implements IDisplayCaptureReceiver {
 	@Override
 	public void onNewImage(ByteBuffer byteBuffer, int width, int height, long timestamp) {
 
-		if(readingBarcode)
+		if(readingBarcode) {
+			Log.v(TAG, "BarcodeReader already in use");
 			return;
+		}
 
+		if(unityInterface == null) {
+			Log.e(TAG, "UnityInterface not started");
+			return;
+		}
+
+		Log.v(TAG, "Starting barcode detection on image " + width + "x" + height);
 		readingBarcode = true;
 
 		new Thread(() -> {
-
-			var bitmap = Bitmap.createBitmap(
-				width,
-				height,
-				Bitmap.Config.ARGB_8888
-			);
-
-			byteBuffer.rewind();
-			bitmap.copyPixelsFromBuffer(byteBuffer);
-
-			int[] pixels = new int[width * height];
-			bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
-			BinaryBitmap binaryBitmap = new BinaryBitmap(new HybridBinarizer(new RGBLuminanceSource(width, height, pixels)));
-
-			Result result;
-
 			try {
-				var barcodeResult = scanner.decode(binaryBitmap);
-				result = new Result(barcodeResult, timestamp);
+				var bitmap = Bitmap.createBitmap(
+					width,
+					height,
+					Bitmap.Config.ARGB_8888
+				);
 
+				byteBuffer.rewind();
+				bitmap.copyPixelsFromBuffer(byteBuffer);
+
+				int[] pixels = new int[width * height];
+				bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+				BinaryBitmap binaryBitmap = new BinaryBitmap(new HybridBinarizer(new RGBLuminanceSource(width, height, pixels)));
+
+				try {
+					var barcodeResult = multiFormatReader.decode(binaryBitmap);
+					Log.i(TAG, "Barcode detected" + barcodeResult.getText());
+					Result result = new Result(barcodeResult, timestamp);
+
+
+					Results results = new Results(1);
+					results.results[0] = result;
+
+					String resultsAsJson = gson.toJson(results);
+					Log.i(TAG, "JSON: " + resultsAsJson);
+
+					if(unityInterface != null) {
+						unityInterface.OnBarcodeResults(resultsAsJson);
+					} else {
+						Log.e(TAG, "Unity interface is null when trying to send results");
+					}
+				} catch (Exception e) {
+					Log.v(TAG, "No barcode detected in this frame: " + e.getMessage());
+				}
 			} catch (Exception e) {
+				Log.e(TAG, "Error processing image for barcode detection: " + e.getMessage(), e);
+			} finally {
 				readingBarcode = false;
-				return;
 			}
-
-			readingBarcode = false;
-
-			Results results = new Results(1);
-			results.results[0] = result;
-
-			String resultsAsJson = gson.toJson(results);
-			Log.i(TAG, "JSON: " + resultsAsJson);
-			unityInterface.OnBarcodeResults(resultsAsJson);
 		}).start();
-
-		/*InputImage input = InputImage.fromBitmap(bitmap, 0);
-
-		readingBarcode = true;
-		scanner.process(input).addOnCompleteListener(task -> {
-
-			readingBarcode = false;
-
-			if (!task.isSuccessful()) {
-				Log.v(TAG, "No barcode found.");
-				return;
-			}
-
-			var taskResult = task.getResult();
-			Results results = new Results(taskResult.size());
-
-			Log.i(TAG, taskResult.size() + " barcodes found.");
-
-			for(int i = 0; i < taskResult.size(); i++) {
-				Barcode barcode = taskResult.get(i);
-				Log.i(TAG, "Barcode: " + barcode.getDisplayValue());
-
-				Result result = new Result();
-				result.text = barcode.getDisplayValue();
-				result.timestamp = timestamp;
-
-				var cornerPoints = Objects.requireNonNull(barcode.getCornerPoints());
-				result.points = new Point[cornerPoints.length];
-				for(int j = 0; j < cornerPoints.length; j++)
-					result.points[j] = new Point(cornerPoints[j]);
-				results.results[i] = result;
-			}
-
-			String resultsAsJson = gson.toJson(results);
-			Log.i(TAG, "JSON: " + resultsAsJson);
-			unityInterface.OnBarcodeResults(resultsAsJson);
-		}); */
 	}
 
-	// called by Unity
 	public void setup(String gameObjectName) {
 		unityInterface = new UnityInterface(gameObjectName);
 	}
 
-//	public BarcodeResult[] getResults() {
-//		return barcodeResults;
-//	}
 }
