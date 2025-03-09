@@ -14,6 +14,17 @@ namespace Anaglyph.DisplayCapture.Barcodes
 		// private Vector3[] offsetPositions = new Vector3[4]; // 4 points needed for qr
 		private Vector3[] linePositions = new Vector3[2];
 
+		private BarcodeReader barcodeReader;
+
+		private void Awake()
+		{
+			barcodeReader = FindObjectOfType<BarcodeReader>();
+			if (barcodeReader == null)
+			{
+				Debug.LogWarning("BarcodeReader didnt load, wont be able to look up products");
+			}
+		}
+
 		// public void Set(BarcodeTracker.Result result) => Set(result.text, result.corners); // corners is for qr
 		public void Set(BarcodeTracker.Result result) => Set(result.text, result.startPoint, result.endPoint);
 
@@ -31,7 +42,7 @@ namespace Anaglyph.DisplayCapture.Barcodes
                 up = Vector3.up; // Default to world up
             }
 			
-			Vector3 right = Vector3.Cross(up, forward).normalized;
+			// Vector3 right = Vector3.Cross(up, forward).normalized;
 
 			transform.rotation = Quaternion.LookRotation(forward, up);
 
@@ -40,7 +51,15 @@ namespace Anaglyph.DisplayCapture.Barcodes
 			lineRenderer.positionCount = 2;
 			lineRenderer.SetPositions(linePositions);
 
-			textMesh.text = text;
+			string displayText = text;
+
+			if (barcodeReader != null && barcodeReader.IsKnownProduct(text, out ProductInfo productInfo))
+            {
+                displayText = productInfo.ToString();
+            }
+
+			//textMesh.text = text;
+			textMesh.text = displayText;
 			textMesh.transform.localPosition = new Vector3(0, 0, -0.05f); // to help visability
 
 		}
