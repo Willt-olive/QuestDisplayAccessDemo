@@ -5949,6 +5949,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   barcodeReader: {fileID: 948905723}
   horizontalFieldOfViewDegrees: 82
+  unprojectionDepth: 5
 --- !u!114 &948905725
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6005,6 +6006,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   barcodeTracker: {fileID: 948905724}
+  barcodeReader: {fileID: 0}
   indicatorPrefab: {fileID: 2856025239876333428, guid: 0152fdb81352ee644a6d5f745165c27b, type: 3}
 --- !u!1 &949081983
 GameObject:

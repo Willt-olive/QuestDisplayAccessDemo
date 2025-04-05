@@ -254,6 +254,9 @@ namespace Anaglyph.DisplayCapture.Barcodes
                 "Test Company", 
                 "2024-12-28", 
                 "2025-12-28"));
+
+            Debug.Log($"Product database initialized with {productDatabase.Count} products");
+
         }
 
 
@@ -276,17 +279,37 @@ namespace Anaglyph.DisplayCapture.Barcodes
             OnReadKnownProduct = delegate { };
 		}
 
+         public bool IsKnownProduct(string barcodeId, out ProductInfo productInfo)
+        {
+            return productDatabase.TryGetValue(barcodeId, out productInfo);
+        }
+
+        private void Update()
+        {
+            // If we have recent results, continuously update them 
+            // This helps keep indicators tracked even when no new barcodes are read
+            if (lastResults.results != null && lastResults.results.Length > 0)
+            {
+                OnReadBarcodes.Invoke(lastResults.results);
+            }
+        }
+
+        private Results lastResults;
 
 #pragma warning disable IDE0051 // Remove unused private members
-		private void OnBarcodeResults(string json)
+        private void OnBarcodeResults(string json)
         {
             Debug.Log($"Received barcode results from Android: {json}");
             try
             {
-                Results results = JsonUtility.FromJson<Results>(json);
-                OnReadBarcodes.Invoke(results.results);
-
-                foreach (var result in results.results)
+                if (string.IsNullOrEmpty(json)) return;
+        
+                lastResults = JsonUtility.FromJson<Results>(json);
+                if (lastResults.results == null || lastResults.results.Length == 0) return;
+        
+                OnReadBarcodes.Invoke(lastResults.results);
+        
+                foreach (var result in lastResults.results)
                 {
                     if (productDatabase.TryGetValue(result.text, out ProductInfo productInfo))
                     {
@@ -299,12 +322,6 @@ namespace Anaglyph.DisplayCapture.Barcodes
             {
                 Debug.LogError($"Error parsing barcode results: {e.Message}");
             }
-        }
-        
-        // check if a barcode is in the database
-        public bool IsKnownProduct(string barcodeId, out ProductInfo productInfo)
-        {
-            return productDatabase.TryGetValue(barcodeId, out productInfo);
         }
 #pragma warning restore IDE0051 // Remove unused private members
 	}

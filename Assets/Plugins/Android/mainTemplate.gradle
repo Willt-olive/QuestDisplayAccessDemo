@@ -47,10 +47,19 @@ android {
     lint {
         abortOnError false
     }
-
+    // these are to stop the gradle errors when building
     afterEvaluate {
         tasks.named("mergeReleaseNativeLibs").configure {
             doNotTrackState("Workaround for Gradle 8+ output tracking issue")
+        }
+        tasks.named("copyReleaseJniLibsProjectAndLocalJars").configure {
+            doNotTrackState("Workaround for Gradle 8+ output tracking issue")
+        }
+        tasks.named("copyReleaseJniLibsProjectOnly").configure {
+            doNotTrackState("Workaround for Gradle 8+ output tracking issue")
+        }
+        tasks.matching { it.name.contains("merge") && it.name.contains("NativeLibs") }.configureEach {
+        doNotTrackState("Workaround for Gradle 8+ output tracking issue")
         }
     }
 

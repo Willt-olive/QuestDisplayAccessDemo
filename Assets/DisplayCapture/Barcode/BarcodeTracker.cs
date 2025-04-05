@@ -1,7 +1,7 @@
-using Anaglyph.XRTemplate.DepthKit;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
 
 namespace Anaglyph.DisplayCapture.Barcodes
 {
@@ -17,14 +17,14 @@ namespace Anaglyph.DisplayCapture.Barcodes
 		public IEnumerable<Result> Results => results;
 
 		public event Action<IEnumerable<Result>> OnTrackBarcodes = delegate { };
+        
+        [SerializeField] private float unprojectionDepth = 5.0f; // distance
 
 		public struct Result
 		{
 			public string text;
 			public Vector3 startPoint;
 			public Vector3 endPoint; 
-			// taditional barcodes only have a start and an end unlike qr which has 4 corners
-
 			public Pose pose;
 
 			public Result(string text)
@@ -42,7 +42,7 @@ namespace Anaglyph.DisplayCapture.Barcodes
 
 			Vector2Int size = DisplayCaptureManager.Instance.Size;
 			float aspect = size.x / (float)size.y;
-
+            // Create a projection matrix that matches your camera settings
 			displayCaptureProjection = Matrix4x4.Perspective(Fov, aspect, 1, 100f);
 		}
 
@@ -54,16 +54,13 @@ namespace Anaglyph.DisplayCapture.Barcodes
 
 		private void OnReadBarcodes(IEnumerable<BarcodeReader.Result> barcodeResults)
 		{
+            Debug.Log($"BarcodeTracker received {barcodeResults.Count()} barcodes");
 			results.Clear();
+
+            Vector2Int size = DisplayCaptureManager.Instance.Size;
 
 			foreach (BarcodeReader.Result barcodeResult in barcodeResults)
 			{
-				// Result trackResult = new Result(barcodeResult.text);
-
-				float timestampInSeconds = barcodeResult.timestamp * 0.000000001f;
-				OVRPlugin.PoseStatef headPoseState = OVRPlugin.GetNodePoseStateAtTime(timestampInSeconds, OVRPlugin.Node.Head);
-				OVRPose headPose = headPoseState.Pose.ToOVRPose();
-				Matrix4x4 headTransform = Matrix4x4.TRS(headPose.position, headPose.orientation, Vector3.one);
 
 				if (barcodeResult.points.Length < 2) continue;
 
@@ -77,19 +74,21 @@ namespace Anaglyph.DisplayCapture.Barcodes
 				Vector2 startUV = new Vector2(startPixel.x / size.x, 1f - startPixel.y / size.y);
 				Vector2 endUV = new Vector2(endPixel.x / size.x, 1f - endPixel.y / size.y);
 
-				trackResult.startPoint = Unproject(displayCaptureProjection, startUV);
-				trackResult.endPoint = Unproject(displayCaptureProjection, endUV);
+                // Unproject these UV coordinates using the custom method with a valid depth value
+                Vector3 startCameraSpace = Unproject(displayCaptureProjection, startUV, unprojectionDepth);
+                Vector3 endCameraSpace = Unproject(displayCaptureProjection, endUV, unprojectionDepth);
 
-				trackResult.startPoint.z = -trackResult.startPoint.z;
-				trackResult.endPoint.z = -trackResult.endPoint.z;
-
-				trackResult.startPoint = headTransform.MultiplyPoint(trackResult.startPoint);
-				trackResult.endPoint = headTransform.MultiplyPoint(trackResult.endPoint);
+                // Multiply by the current camera transform to obtain world positions
+                Matrix4x4 cameraMatrix = Camera.main.transform.localToWorldMatrix;
+                Vector3 startWorld = cameraMatrix.MultiplyPoint(startCameraSpace);
+                Vector3 endWorld = cameraMatrix.MultiplyPoint(endCameraSpace);
 
 				Vector3 barcodeCenter = (trackResult.startPoint + trackResult.endPoint) / 2f;
 				Vector3 forward = (trackResult.endPoint - trackResult.startPoint).normalized;
 				Vector3 up = Vector3.up; // assume barcode is horizontally aligned
 
+                trackResult.startPoint = startWorld;
+                trackResult.endPoint = endWorld;
 				trackResult.pose = new Pose(barcodeCenter, Quaternion.LookRotation(forward, up));
 
 				results.Add(trackResult);
