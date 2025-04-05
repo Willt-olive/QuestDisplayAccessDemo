@@ -9,6 +9,8 @@
 !*.java
 !*.java.meta
 
+!*.prefab
+
 # Ensure directories are tracked (but only with allowed files inside)
 !.gitignore
 !.gitattributes

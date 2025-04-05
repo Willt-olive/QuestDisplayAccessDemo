@@ -224,6 +224,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   lineRenderer: {fileID: 1193044821850367535}
   textMesh: {fileID: 3096711948781985342}
+  showDebugText: 1
+  Panel: {fileID: 382228533316760433, guid: 28b13cd6cc2c74b42a75993bfc5d0e30, type: 3}
 --- !u!120 &1193044821850367535
 LineRenderer:
   serializedVersion: 2

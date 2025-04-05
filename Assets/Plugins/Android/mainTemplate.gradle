@@ -48,6 +48,12 @@ android {
         abortOnError false
     }
 
+    afterEvaluate {
+        tasks.named("mergeReleaseNativeLibs").configure {
+            doNotTrackState("Workaround for Gradle 8+ output tracking issue")
+        }
+    }
+
     androidResources {
         noCompress = **BUILTIN_NOCOMPRESS** + unityStreamingAssets.tokenize(', ')
         ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~"
