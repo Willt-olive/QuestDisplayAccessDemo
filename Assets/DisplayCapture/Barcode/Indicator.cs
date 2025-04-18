@@ -1,81 +1,71 @@
 using TMPro;
 using UnityEngine;
-using Anaglyph.DisplayCapture.Barcodes;
+using System.Collections.Generic;
 
-public class Indicator : MonoBehaviour
+namespace Anaglyph.DisplayCapture.Barcodes
 {
-	[SerializeField] private TMP_Text textMesh;
-    [SerializeField] private float offsetDistance = 0.05f; // Distance to offset from barcode
-    [SerializeField] private Vector3 offsetDirection = new Vector3(0, 0.03f, 0); // Slight up offset
-
-    private ProductInfo product;
-    private BarcodeTracker.Result lastResult;
-    private bool isTracking = false;
-
-    public void Set(BarcodeTracker.Result result, ProductInfo info)
+    public class Indicator : MonoBehaviour
     {
-        product = info;
-        lastResult = result;
-        isTracking = true;
+	    [SerializeField] private TMP_Text textMesh;
+        [SerializeField] private float verticalOffset = 0.05f;
 
-        // Set text with product info
-        textMesh.text = 
-            $"<b>{info.Name}</b>\n" +
-            $"${info.Price:F2}\n" +
-            $"By: {info.Manufacturer}\n" +
-            $"Exp: {info.ExpiryDate}\n" +
-            $"<i>[Tap to Add]</i>";
-
-        // Position will be updated in Update method
-        UpdatePosition();
-    }
-
-    private void Update()
-    {
-        if (isTracking)
+        public void Set(BarcodeTracker.Result result, ProductInfo info)
         {
-            UpdatePosition();
+            lastSeenTime = Time.time;
+            gameObject.SetActive(true);
+
+            string preferenceWarning = GetPreferenceWarnings(info.Ingredients ?? "");
+            string ingredientText = string.IsNullOrEmpty(preferenceWarning) ? "" : $"<color=red>Contains: {preferenceWarning}</color>\n";
+
+             // Set text with product info
+            textMesh.text = 
+                $"<b>{info.Name}</b>\n" +
+                $"${info.Price:F2}\n" +
+                $"By: {info.Manufacturer}\n" +
+                $"Exp: {info.ExpiryDate}\n" +
+                $"{ingredientText}" +
+                $"<i>[Tap to Add]</i>";
+
+            UpdatePosition(result);
         }
-    }
 
-    private void UpdatePosition()
-    {
-        // Position right next to the barcode
-        Vector3 barcodeCenter = lastResult.pose.position;
-        
-        // Calculate offset - to the right of the barcode
-        Vector3 right = lastResult.pose.rotation * Vector3.right;
-        float barcodeWidth = Vector3.Distance(lastResult.startPoint, lastResult.endPoint);
-        
-        // Position indicator to the right of the barcode with some spacing
-        transform.position = barcodeCenter + (right * (barcodeWidth/2 + offsetDistance)) + offsetDirection;
-        
-        // Always face the camera
-        transform.LookAt(Camera.main.transform);
-        transform.Rotate(0, 180, 0); // Flip text to face camera correctly
-    }
-
-    public void StopTracking()
-    {
-        isTracking = false;
-    }
-
-    private void OnMouseDown()
-    {
-        if (product != null)
+        private string GetPreferenceWarnings(string ingredients)
         {
-            BasketManager.Instance.AddToBasket(product);
-            
-            // Add visual feedback
-            StartCoroutine(FlashConfirmation());
+            List<string> found = new();
+            ingredients = ingredients.ToLower();
+
+            if (UserPreferences.Instance.SelectedPreferences.Contains(Preference.Gluten) && ingredients.Contains("wheat"))
+                found.Add("Gluten");
+            if (UserPreferences.Instance.SelectedPreferences.Contains(Preference.Lactose) && (ingredients.Contains("milk") || ingredients.Contains("cheese") || ingredients.Contains("butter")))
+                found.Add("Lactose");
+            if (UserPreferences.Instance.SelectedPreferences.Contains(Preference.Meat) && (ingredients.Contains("beef") || ingredients.Contains("chicken") || ingredients.Contains("pork")))
+                found.Add("Meat");
+
+            return string.Join(", ", found);
         }
-    }
-    
-    private System.Collections.IEnumerator FlashConfirmation()
-    {
-        Color originalColor = textMesh.color;
-        textMesh.color = Color.green;
-        yield return new WaitForSeconds(0.2f);
-        textMesh.color = originalColor;
+
+        private void UpdatePosition(BarcodeTracker.Result result)
+        {
+            Vector3 barcodeCenter = (result.startPoint + result.endPoint) / 2f;
+            Vector3 targetPosition = barcodeCenter + Vector3.up * verticalOffset;
+            transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * 10f);
+            // Rotate indicator to face the camera horizontally
+            Vector3 cameraDirection = Camera.main.transform.position - transform.position;
+            cameraDirection.y = 0;
+            transform.rotation = Quaternion.LookRotation(-cameraDirection); // - to invert text
+        }
+
+        // timeout for info
+        private float lastSeenTime;
+        private const float timeout = 2f;
+
+        private void Update()
+        {
+            if (Time.time - lastSeenTime > timeout)
+            {
+                gameObject.SetActive(false);
+            }
+        }
+
     }
 }

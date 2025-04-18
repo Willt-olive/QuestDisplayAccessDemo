@@ -18,7 +18,7 @@ namespace Anaglyph.DisplayCapture.Barcodes
 
 		public event Action<IEnumerable<Result>> OnTrackBarcodes = delegate { };
         
-        [SerializeField] private float unprojectionDepth = 5.0f; // distance
+        [SerializeField] private float unprojectionDepth = 1.0f; // distance
 
 		public struct Result
 		{
@@ -39,16 +39,13 @@ namespace Anaglyph.DisplayCapture.Barcodes
 		private void Awake()
 		{
 			barcodeReader.OnReadBarcodes += OnReadBarcodes;
-
-			Vector2Int size = DisplayCaptureManager.Instance.Size;
-			float aspect = size.x / (float)size.y;
             // Create a projection matrix that matches your camera settings
-			displayCaptureProjection = Matrix4x4.Perspective(Fov, aspect, 1, 100f);
-		}
+            displayCaptureProjection = DisplayCaptureManager.Instance.ProjectionMatrix;
+        }
 
 		private void OnDestroy()
 		{
-			if(barcodeReader != null)
+			if (barcodeReader != null)
 				barcodeReader.OnReadBarcodes -= OnReadBarcodes;
 		}
 
@@ -69,23 +66,17 @@ namespace Anaglyph.DisplayCapture.Barcodes
 				BarcodeReader.Point startPixel = barcodeResult.points[0];
 				BarcodeReader.Point endPixel = barcodeResult.points[1];
 
-				Vector2Int size = DisplayCaptureManager.Instance.Size;
+                // Directly convert to viewport coordinates (0 to 1 range)
+				Vector3 startUV = new Vector3(startPixel.x / size.x, 1f - (startPixel.y / size.y), unprojectionDepth);
+				Vector3 endUV = new Vector3(endPixel.x / size.x, 1f - e(ndPixel.y / size.y), unprojectionDepth);
 
-				Vector2 startUV = new Vector2(startPixel.x / size.x, 1f - startPixel.y / size.y);
-				Vector2 endUV = new Vector2(endPixel.x / size.x, 1f - endPixel.y / size.y);
+                // Using Unity's built-in viewport to world conversion for stability
+                Vector3 startWorld = Camera.main.ViewportToWorldPoint(startUV);
+                Vector3 endWorld = Camera.main.ViewportToWorldPoint(endUV);
 
-                // Unproject these UV coordinates using the custom method with a valid depth value
-                Vector3 startCameraSpace = Unproject(displayCaptureProjection, startUV, unprojectionDepth);
-                Vector3 endCameraSpace = Unproject(displayCaptureProjection, endUV, unprojectionDepth);
-
-                // Multiply by the current camera transform to obtain world positions
-                Matrix4x4 cameraMatrix = Camera.main.transform.localToWorldMatrix;
-                Vector3 startWorld = cameraMatrix.MultiplyPoint(startCameraSpace);
-                Vector3 endWorld = cameraMatrix.MultiplyPoint(endCameraSpace);
-
-				Vector3 barcodeCenter = (trackResult.startPoint + trackResult.endPoint) / 2f;
-				Vector3 forward = (trackResult.endPoint - trackResult.startPoint).normalized;
-				Vector3 up = Vector3.up; // assume barcode is horizontally aligned
+                Vector3 barcodeCenter = (startWorld + endWorld) / 2f;
+                Vector3 forward = (endWorld - startWorld).normalized;
+                Vector3 up = Vector3.up;
 
                 trackResult.startPoint = startWorld;
                 trackResult.endPoint = endWorld;
@@ -97,12 +88,17 @@ namespace Anaglyph.DisplayCapture.Barcodes
 			OnTrackBarcodes.Invoke(results);
 		}
 
-		private static Vector3 Unproject(Matrix4x4 projection, Vector2 uv)
-		{
-			Vector2 v = 2f * uv - Vector2.one;
-			var p = new Vector4(v.x, v.y, 0.1f, 1f);
-			p = projection.inverse * p;
-			return new Vector3(p.x, p.y, p.z) / p.w;
-		}
-	}
+
+        private Vector3 UnprojectToCameraSpace(Vector2 uv, float depth)
+        {
+            // Convert UV (0,1) to normalized device coordinates (-1,1)
+            Vector4 clipSpace = new Vector4(uv.x * 2f - 1f, uv.y * 2f - 1f, 2f * (depth - Camera.main.nearClipPlane) / (Camera.main.farClipPlane - Camera.main.nearClipPlane) - 1f, 1f);
+
+            // Convert from clip space to camera space
+            Vector4 cameraSpacePos = displayCaptureProjection.inverse * clipSpace;
+            cameraSpacePos /= cameraSpacePos.w;
+
+            return new Vector3(cameraSpacePos.x, cameraSpacePos.y, cameraSpacePos.z);
+        }
+    }
 }
