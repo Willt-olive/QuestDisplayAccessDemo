@@ -68,7 +68,7 @@ namespace Anaglyph.DisplayCapture.Barcodes
 
                 // Directly convert to viewport coordinates (0 to 1 range)
 				Vector3 startUV = new Vector3(startPixel.x / size.x, 1f - (startPixel.y / size.y), unprojectionDepth);
-				Vector3 endUV = new Vector3(endPixel.x / size.x, 1f - e(ndPixel.y / size.y), unprojectionDepth);
+				Vector3 endUV = new Vector3(endPixel.x / size.x, 1f - (endPixel.y / size.y), unprojectionDepth);
 
                 // Using Unity's built-in viewport to world conversion for stability
                 Vector3 startWorld = Camera.main.ViewportToWorldPoint(startUV);
